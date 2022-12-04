@@ -1,9 +1,10 @@
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, DirEntry};
-use std::path::Path;
-use std::{io};
+use std::io;
+use std::path::{self, Path};
+
+use filesize::PathExt;
 
 /*
 Accepts Config struct as argument in order to specify
@@ -18,7 +19,7 @@ pub struct Config {
 }
 
 pub struct Results {
-    results: HashMap<String, u32>
+    results: HashMap<String, u32>,
 }
 
 impl Config {
@@ -59,5 +60,7 @@ pub fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
 }
 
 fn add_entry(entry: &DirEntry) {
-    let path = Path::new(entry);
+    let path = entry.path();
+    let metadata = path.symlink_metadata()?;
+    let size = path.size_on_disk_fast(&metadata);
 }
