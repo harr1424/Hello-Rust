@@ -11,17 +11,16 @@ Accepts Config struct as argument in order to specify
 search string and the file in which to search for the string.
 */
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let mut result_map = match search(&config.root_path) {
-        Ok(results) => results,
-        Err(e) => {
-            return Err(Box::new(e))
-        }
-    };
-    
-    let mut result_map = search(&config.root_path)?;
+    let results = search(&config.root_path)?;
     
     // sort result_map by value (descending)
-    // https://stackoverflow.com/questions/63950197/sort-a-hashmap-by-values-in-rust
+    let mut sort_vec: Vec<(&String, &u64)> = results.result_map.iter().collect();
+    sort_vec.sort_by(|a, b| b.1.cmp(a.1));
+
+    for i in 0..10 {
+        println!("{:?}", sort_vec[i]);
+    }
+
 
     Ok(())
 }
