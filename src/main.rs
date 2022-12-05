@@ -5,7 +5,7 @@ use hello_rust::Config;
 
 fn main() {
     // variable to store arguments passed at program launch
-    // user should only pass in file_path to analyze recursively 
+    // user should only pass in file_path to analyze a dir recursively 
     let args: Vec<String> = env::args().collect();
 
     // bind arguments to a Config struct
@@ -14,7 +14,7 @@ fn main() {
         process::exit(1);
     });
 
-    // begin program using Config
+    // begin program using provided configuration
     if let Err(e) = hello_rust::run(config) {
         eprintln!("Fatal Error: {e}");
         process::exit(1);

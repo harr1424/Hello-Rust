@@ -2,34 +2,39 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, DirEntry};
 use std::io;
-use std::path::{Path};
+use std::path::Path;
 
 use filesize::PathExt;
 
 /*
-Accepts Config struct as argument in order to specify
-search string and the file in which to search for the string.
+Accepts Config struct as argument in order to specify the directory to analyze
 */
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let results = search(&config.root_path)?;
-    
+
     // sort result_map by value (descending)
     let mut sort_vec: Vec<(&String, &u64)> = results.result_map.iter().collect();
     sort_vec.sort_by(|a, b| b.1.cmp(a.1));
 
+    // Print the largest ten files found in the specified directory
     for i in 0..10 {
         println!("{:?}", sort_vec[i]);
     }
 
-
     Ok(())
 }
 
+/*
+Config struct used to hold the string representation of the directory to recursively analyze
+ */
 pub struct Config {
     root_path: String,
 }
 
-#[derive(Debug)]
+/*
+Results struct to hold a HashMap with file paths as keys and bytes of files as values
+ */
+//#[derive(Debug)]
 pub struct Results {
     result_map: HashMap<String, u64>,
 }
@@ -48,10 +53,15 @@ impl Config {
     }
 }
 
+/*
+Converts the string representation of a directory to a file path object and an instance 
+of a Results struct. Passes both to visit_dirs(). 
+ */
 pub fn search(path: &str) -> Result<Results, io::Error> {
     let root_path = Path::new(path);
-    let mut results = Results { result_map: HashMap::<String, u64>::new()};
-
+    let mut results = Results {
+        result_map: HashMap::<String, u64>::new(),
+    };
 
     match visit_dirs(root_path, &mut results) {
         Err(e) => eprintln!("Error calling visit_dirs() from search(): {:?}", e),
@@ -61,6 +71,11 @@ pub fn search(path: &str) -> Result<Results, io::Error> {
     Ok(results)
 }
 
+/*
+Visit each file system entry in the specified directory and if it is a file, will call add_entry()
+passing the entry as an argument. Otherwise, if an entry is a directory, it will be entered and searched 
+in a recursive manner. 
+ */
 pub fn visit_dirs(dir: &Path, results: &mut Results) -> io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
@@ -79,7 +94,11 @@ pub fn visit_dirs(dir: &Path, results: &mut Results) -> io::Result<()> {
     Ok(())
 }
 
-fn add_entry(entry: &DirEntry, results: &mut Results) -> io::Result<()>{
+/*
+For each file found, convert the file's path to a string representation and calculate the size in bytes 
+of the file. Insert these values into the results_map member of the Results struct.
+ */
+fn add_entry(entry: &DirEntry, results: &mut Results) -> io::Result<()> {
     let path = entry.path();
     let metadata = path.symlink_metadata()?;
     let size = path.size_on_disk_fast(&metadata)?;
