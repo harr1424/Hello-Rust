@@ -11,11 +11,16 @@ Accepts Config struct as argument in order to specify
 search string and the file in which to search for the string.
 */
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let mut result_map = match search(&config.root_path) {
+        Ok(results) => results,
+        Err(e) => {
+            return Err(Box::new(e))
+        }
+    };
     
-    match search(&config.root_path) {
-        Err(e) => eprintln!("Error when calling run(): {:?}", e),
-        Ok(results) => println!("{:?}", results),
-    }
+    let mut result_map = search(&config.root_path)?;
+    
+    // sort result_map by value (descending)
 
     Ok(())
 }
