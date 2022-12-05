@@ -21,6 +21,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let mut result_map = search(&config.root_path)?;
     
     // sort result_map by value (descending)
+    // https://stackoverflow.com/questions/63950197/sort-a-hashmap-by-values-in-rust
 
     Ok(())
 }
