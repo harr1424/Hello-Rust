@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, DirEntry};
 use std::io;
-use std::path::{self, Path};
+use std::path::{Path};
 
 use filesize::PathExt;
 
@@ -11,6 +11,12 @@ Accepts Config struct as argument in order to specify
 search string and the file in which to search for the string.
 */
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    
+    match search(&config.root_path) {
+        Err(e) => eprintln!("Error when calling run(): {:?}", e),
+        Ok(results) => println!("{:?}", results),
+    }
+
     Ok(())
 }
 
@@ -18,8 +24,9 @@ pub struct Config {
     root_path: String,
 }
 
+#[derive(Debug)]
 pub struct Results {
-    results: HashMap<String, u32>,
+    result_map: HashMap<String, u64>,
 }
 
 impl Config {
@@ -36,31 +43,45 @@ impl Config {
     }
 }
 
-pub fn search(path: &str) -> io::Result<()> {
+pub fn search(path: &str) -> Result<Results, io::Error> {
     let root_path = Path::new(path);
+    let mut results = Results { result_map: HashMap::<String, u64>::new()};
 
-    visit_dirs(root_path, &add_entry);
 
-    Ok(())
+    match visit_dirs(root_path, &mut results) {
+        Err(e) => eprintln!("Error calling visit_dirs() from search(): {:?}", e),
+        _ => (),
+    }
+
+    Ok(results)
 }
 
-pub fn visit_dirs(dir: &Path, cb: &dyn Fn(&DirEntry)) -> io::Result<()> {
+pub fn visit_dirs(dir: &Path, results: &mut Results) -> io::Result<()> {
     if dir.is_dir() {
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                visit_dirs(&path, cb)?;
+                visit_dirs(&path, results)?;
             } else {
-                cb(&entry);
+                match add_entry(&entry, results) {
+                    Err(e) => eprintln!("Error calling add_entry() from visit_dirs(): {:?}", e),
+                    _ => (),
+                }
             }
         }
     }
     Ok(())
 }
 
-fn add_entry(entry: &DirEntry) {
+fn add_entry(entry: &DirEntry, results: &mut Results) -> io::Result<()>{
     let path = entry.path();
     let metadata = path.symlink_metadata()?;
-    let size = path.size_on_disk_fast(&metadata);
+    let size = path.size_on_disk_fast(&metadata)?;
+
+    let str_path = path.to_str().unwrap_or("Unknown File");
+
+    results.result_map.insert(str_path.to_string(), size);
+
+    Ok(())
 }
