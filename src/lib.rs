@@ -17,8 +17,15 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     sort_vec.sort_by(|a, b| b.1.cmp(a.1));
 
     // Print the largest ten files found in the specified directory
-    for i in 0..10 {
-        println!("{:?}", sort_vec[i]);
+
+    if sort_vec.len() > 10 {
+        for i in 0..10 {
+            println!("{:?}", sort_vec[i]);
+        }
+    } else {
+        for i in 0..sort_vec.len() {
+            println!("{:?}", sort_vec[i]);
+        }
     }
 
     Ok(())
@@ -54,8 +61,8 @@ impl Config {
 }
 
 /*
-Converts the string representation of a directory to a file path object and an instance 
-of a Results struct. Passes both to visit_dirs(). 
+Converts the string representation of a directory to a file path object and an instance
+of a Results struct. Passes both to visit_dirs().
  */
 pub fn search(path: &str) -> Result<Results, io::Error> {
     let root_path = Path::new(path);
@@ -73,8 +80,8 @@ pub fn search(path: &str) -> Result<Results, io::Error> {
 
 /*
 Visit each file system entry in the specified directory and if it is a file, will call add_entry()
-passing the entry as an argument. Otherwise, if an entry is a directory, it will be entered and searched 
-in a recursive manner. 
+passing the entry as an argument. Otherwise, if an entry is a directory, it will be entered and searched
+in a recursive manner.
  */
 pub fn visit_dirs(dir: &Path, results: &mut Results) -> io::Result<()> {
     if dir.is_dir() {
@@ -95,7 +102,7 @@ pub fn visit_dirs(dir: &Path, results: &mut Results) -> io::Result<()> {
 }
 
 /*
-For each file found, convert the file's path to a string representation and calculate the size in bytes 
+For each file found, convert the file's path to a string representation and calculate the size in bytes
 of the file. Insert these values into the results_map member of the Results struct.
  */
 fn add_entry(entry: &DirEntry, results: &mut Results) -> io::Result<()> {
