@@ -1,9 +1,12 @@
 use std::env;
 use std::process;
+use std::time::{Instant};
 
 use hello_rust::Config;
 
 fn main() {
+    let start = Instant::now();
+
     // variable to store arguments passed at program launch
     // user should only pass in file_path to analyze a dir recursively 
     let args: Vec<String> = env::args().collect();
@@ -19,4 +22,9 @@ fn main() {
         eprintln!("Fatal Error: {e}");
         process::exit(1);
     }
+
+    let duration = start.elapsed();
+    println!("\nProgram completed in {:?} seconds", duration.as_secs_f32());
 }
+
+// program completes in about 0.4 seconds on average 

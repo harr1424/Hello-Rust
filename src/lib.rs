@@ -1,15 +1,20 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{self, DirEntry};
-use std::io;
+use std::{io, env};
 use std::path::Path;
 
 use filesize::PathExt;
+
+// define how many entries should be output
+const NUM_ENTRIES: usize = 10;
 
 /*
 Accepts Config struct as argument in order to specify the directory to analyze
 */
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    println!("Searching for {0} largest entries in {1}:\n", NUM_ENTRIES, config.root_path);
+
     let results = search(&config.root_path)?;
 
     // sort result_map by value (descending)
@@ -18,8 +23,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     // Print the largest ten files found in the specified directory
 
-    if sort_vec.len() > 10 {
-        for i in 0..10 {
+    if sort_vec.len() > NUM_ENTRIES {
+        for i in 0..NUM_ENTRIES {
             println!("{:?}", sort_vec[i]);
         }
     } else {
@@ -48,10 +53,20 @@ pub struct Results {
 
 impl Config {
     pub fn build(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() < 2 {
-            return Err("File path was not specified");
+        if args.len() == 1 {
+            // no argument passed at program invocation, default to current working directory
+            let cwd = env::current_dir().unwrap_or_else(|error| {
+                panic!("Unable to infer current working director, try passing a path as program argument. {:?}", error);
+            });
+
+            let path = cwd.into_os_string().into_string().unwrap_or_else(|error| {
+                panic!("Unable to infer current working director, try passing a path as program argument. {:?}", error);
+            });
+            
+            println!("No path provided as argument, defaulting to current working directory.");
+            Ok(Config { root_path: String::from(path) })
         } else if args.len() > 2 {
-            return Err("Usage: disk_storage /User/Documents/");
+            return Err("Expected only one argument");
         } else {
             let root_path = args[1].clone();
 
