@@ -10,45 +10,10 @@ use filesize::PathExt;
 const NUM_ENTRIES: usize = 10;
 
 /*
-Accepts Config struct as argument in order to specify the directory to analyze
-*/
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    println!("Searching for {0} largest entries in {1}:\n", NUM_ENTRIES, config.root_path);
-
-    let results = search(&config.root_path)?;
-
-    // sort result_map by value (descending)
-    let mut sort_vec: Vec<(&String, &u64)> = results.result_map.iter().collect();
-    sort_vec.sort_by(|a, b| b.1.cmp(a.1));
-
-    // Print the largest ten files found in the specified directory
-
-    if sort_vec.len() > NUM_ENTRIES {
-        for i in 0..NUM_ENTRIES {
-            println!("{:?}", sort_vec[i]);
-        }
-    } else {
-        for i in 0..sort_vec.len() {
-            println!("{:?}", sort_vec[i]);
-        }
-    }
-
-    Ok(())
-}
-
-/*
 Config struct used to hold the string representation of the directory to recursively analyze
  */
 pub struct Config {
     root_path: String,
-}
-
-/*
-Results struct to hold a HashMap with file paths as keys and bytes of files as values
- */
-//#[derive(Debug)]
-pub struct Results {
-    result_map: HashMap<String, u64>,
 }
 
 impl Config {
@@ -73,6 +38,41 @@ impl Config {
             Ok(Config { root_path })
         }
     }
+}
+
+/*
+Results struct to hold a HashMap with file paths as keys and bytes of files as values
+ */
+//#[derive(Debug)]
+pub struct Results {
+    result_map: HashMap<String, u64>,
+}
+
+/*
+Accepts Config struct as argument in order to specify the directory to analyze
+*/
+pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    println!("Searching for {0} largest entries in {1}:\n", NUM_ENTRIES, config.root_path);
+
+    let results = search(&config.root_path)?;
+
+    // sort result_map by value (descending)
+    let mut sort_vec: Vec<(&String, &u64)> = results.result_map.iter().collect();
+    sort_vec.sort_by(|a, b| b.1.cmp(a.1));
+
+    // Print the largest ten files found in the specified directory
+
+    if sort_vec.len() > NUM_ENTRIES {
+        for i in 0..NUM_ENTRIES {
+            println!("{:?}", sort_vec[i]);
+        }
+    } else {
+        for i in 0..sort_vec.len() {
+            println!("{:?}", sort_vec[i]);
+        }
+    }
+
+    Ok(())
 }
 
 /*
