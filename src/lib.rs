@@ -3,7 +3,6 @@ use std::error::Error;
 use std::fs::{self, DirEntry};
 use std::{io, env};
 use std::path::Path;
-
 use filesize::PathExt;
 
 // define how many entries should be output
