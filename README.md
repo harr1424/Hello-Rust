@@ -3,7 +3,7 @@
 Originally a simple CLI application to learn the fundamentals of the Rust programming language. This program has seen significant improvement and will 
 display information about large files on your filesystem. 
 
-It will display the Nth largest files nested at any level within a directory that you specify. I ran it against my home directory and discovered [a colletion of ancient docker volumes](https://stackoverflow.com/questions/39878939/docker-filling-up-storage-on-macos) inside the `~/.Library` directory. 
+It will display the Nth largest files nested at any level within a directory that you specify. I ran it against my home directory and discovered a [colletion of ancient docker volumes](https://stackoverflow.com/questions/39878939/docker-filling-up-storage-on-macos) inside the `~/.Library` directory. 
 
 
 ```
