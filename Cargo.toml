@@ -1,9 +1,16 @@
 [package]
-name = "hello_rust"
+name = "ferris-files"
 version = "0.1.0"
+authors = ["John Harrington"]
 edition = "2021"
+description = "A CLI to find large files"
+repository = "https://github.com/harr1424/ferris-files"
+readme = "README.md"
+license = "MIT"
+keywords = ["filesystem", "utility"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 filesize = "0.2.0"
+indicatif = { version = "0.17", features = ["rayon"] }
+rayon = "1.10.0"
