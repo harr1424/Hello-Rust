@@ -199,8 +199,10 @@ dependencies = [
  "env_logger",
  "filesize",
  "indicatif",
+ "libc",
  "log",
  "rayon",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
