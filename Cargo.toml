@@ -1,6 +1,6 @@
 [package]
 name = "ferris-files"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["John Harrington"]
 edition = "2021"
 description = "A CLI to find large files"

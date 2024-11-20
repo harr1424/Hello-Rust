@@ -547,7 +547,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         });
     }
 
-    println!();
+    println!("\n");
 
     match top_entries.lock() {
         Ok(top) => {
