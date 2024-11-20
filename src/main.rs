@@ -3,8 +3,6 @@ use ferris_files::{args::Args, config::Config, run};
 use std::process;
 use std::time::Instant;
 
-// TODO explore adding support for finding largest dirs instead of files
-// if pursued use a flag to control either files or dirs
 fn main() {
     std::env::set_var("RUST_LOG", "trace");
     env_logger::init();

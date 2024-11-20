@@ -25,41 +25,7 @@ pub mod args;
 
 pub mod tests;
 
-// TODO create a lof file in config and share it safely across threads 
-// for writing errors instead of printing to the console 
-
 /// Represents a file system entry with its path and processing result.
-///
-/// This struct is used during parallel directory traversal to track both
-/// the path of a file and any errors encountered while processing it.
-///
-/// # Fields
-///
-/// * `path` - The file system path to the entry
-/// * `result` - The processing status: `Ok(())` if no errors were encountered,
-///             or `Err(SearchError)` containing the specific error
-///
-/// # Example
-///
-/// ```ignore
-/// let entry = FileEntry {
-///     path: PathBuf::from("/path/to/file"),
-///     result: Ok(()),
-/// };
-///
-/// // Entry with an error
-/// let failed_entry = FileEntry {
-///     path: PathBuf::from("/path/to/inaccessible/file"),
-///     result: Err(SearchError::IoError(io::Error::new(
-///         io::ErrorKind::PermissionDenied,
-///         "Access denied"
-///     ))),
-/// };
-/// ```
-///
-/// This struct is primarily used in batch processing operations in order to
-/// track both successful and failed file operations while maintaining the original
-/// file paths.
 #[derive(Debug)]
 struct FileEntry {
     path: PathBuf,
@@ -116,6 +82,8 @@ fn get_fd_limit() -> usize {
 ///
 /// * `batch` - Vector of file entries to process. Each entry contains a path and its current processing status
 /// * `top_entries` - Thread-safe collection that maintains the N largest files found so far
+/// * `error_log` - Thread-safe collection that maintains a record of any errors that occurr
+/// * `is_verbose` - A bool used to log error messages if true
 ///
 /// # Returns
 ///
@@ -125,31 +93,23 @@ fn get_fd_limit() -> usize {
 ///
 /// # Error Handling
 ///
-/// The function logs but does not propagate errors for:
+/// The function logs errors when is_verbose is true but does not propagate errors for:
 /// * File metadata access failures
 /// * File size calculation failures
 /// * Invalid UTF-8 in path names
 /// * Mutex lock failures
 ///
-/// # Example
-///
-/// ```ignore
-/// let batch = vec![FileEntry {
-///     path: PathBuf::from("example.txt"),
-///     result: Ok(()),
-/// }];
-/// let top_entries = Arc::new(Mutex::new(TopEntries::new(10)));
-///
-/// let (processed, total) = process_batch(batch, &top_entries);
-/// println!("Processed {processed} out of {total} files");
-/// ```
-///
 /// # Implementation Details
 ///
 /// * Uses parallel iteration for metadata collection
-/// * Respects previous error states of file entries - metadata collection is skipped on entry.result Err variant
+/// * Metadata collection is skipped on entry.result Err variant
 /// * Maintains a thread-safe ordering of largest files
-fn process_batch(batch: Vec<FileEntry>, top_entries: &Arc<Mutex<TopEntries>>) -> (usize, usize) {
+fn process_batch(
+    batch: Vec<FileEntry>,
+    top_entries: &Arc<Mutex<TopEntries>>,
+    error_log: Arc<Mutex<Vec<String>>>,
+    is_verbose: bool,
+) -> (usize, usize) {
     let metadata_results: Vec<_> = batch
         .into_par_iter()
         .map(|entry| match entry.result {
@@ -210,10 +170,8 @@ fn process_batch(batch: Vec<FileEntry>, top_entries: &Arc<Mutex<TopEntries>>) ->
     }
 
     // Log errors if any occurred
-    if !errors.is_empty() {
-
-        // TODO write to file 
-        log_errors(&errors);
+    if !errors.is_empty() && is_verbose {
+        error_log.lock().unwrap().extend(errors);
     }
 
     (processed, total)
@@ -225,14 +183,13 @@ fn process_batch(batch: Vec<FileEntry>, top_entries: &Arc<Mutex<TopEntries>>) ->
 ///
 /// * `root_dir` - The root directory to start the search from
 /// * `tx` - A channel sender to transmit batches of discovered file paths
-/// * `progress` - A progress bar for displaying current scanning status
-/// * `skip_dirs` - Set of directory paths to exclude from the search
-/// * `batch_size` - Number of file paths to collect before sending through the channel
-/// * `max_open_files` - Max number of open file descriptors the program will open at one time
+/// * `config` - Arc reference to a config instance
+/// * `error_log` - Thread safe collection of errors ocurring during runtime
 ///
 /// # Returns
 ///
-/// Returns an `io::Result<()>` indicating whether the operation completed successfully.
+/// Returns an `io::Result<(), SearchError>` indicating whether the operation completed successfully
+/// or if a SearchError occurred
 ///
 /// # Details
 ///
@@ -248,24 +205,26 @@ fn parallel_search(
     root_dir: &Path,
     tx: Sender<Vec<FileEntry>>,
     progress: ProgressBar,
-    skip_dirs: &HashSet<String>,
-    batch_size: usize,
-    max_open_files: usize,
+    config: Arc<Config>,
+    error_log: Arc<Mutex<Vec<String>>>,
 ) -> Result<(), SearchError> {
     let work_queue = Arc::new(Mutex::new(VecDeque::new()));
     let is_scanning = Arc::new(AtomicBool::new(true));
 
-    // Canonicalize skip directories with error handling
-    let skip_dirs: HashSet<PathBuf> = skip_dirs
+    // Canonicalize directories to ignore
+    let skip_dirs: HashSet<PathBuf> = config
+        .skip_dirs
         .iter()
         .filter_map(|dir| match PathBuf::from(dir).canonicalize() {
             Ok(path) => Some(path),
             Err(err) => {
-                // TODO write to file 
-                let _ = log_error(&format!(
-                    "Warning: Could not canonicalize skip directory '{}': {}",
-                    dir, err
-                ));
+                if config.verbose {
+                    error_log.lock().unwrap().push(format!(
+                        "Warning: Could not canonicalize skip directory '{}': {}",
+                        dir, err
+                    ));
+                }
+
                 None
             }
         })
@@ -275,10 +234,12 @@ fn parallel_search(
     match root_dir.canonicalize() {
         Ok(root) => work_queue.lock().unwrap().push_back(root),
         Err(err) => {
-            return Err(SearchError::PathError(format!(
-                "Failed to canonicalize root directory: {}",
-                err
-            )))
+            if config.verbose {
+                error_log
+                    .lock()
+                    .unwrap()
+                    .push(format!("Failed to canonicalize root directory: {}", err));
+            }
         }
     }
 
@@ -286,11 +247,7 @@ fn parallel_search(
     let open_files = Arc::new(AtomicUsize::new(0));
     let errors_count = Arc::new(AtomicUsize::new(0));
 
-    let thread_count = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1);
-
-    for thread_id in 0..thread_count {
+    for _ in 0..config.num_threads {
         let work_queue = Arc::clone(&work_queue);
         let tx = tx.clone();
         let progress = progress.clone();
@@ -298,39 +255,54 @@ fn parallel_search(
         let is_scanning = Arc::clone(&is_scanning);
         let skip_dirs = skip_dirs.clone();
         let errors_count = Arc::clone(&errors_count);
+        let config_clone = config.clone();
+        let error_log = error_log.clone();
 
         handles.push(thread::spawn(move || -> Result<(), SearchError> {
-            let mut batch = Vec::with_capacity(batch_size);
+            let mut batch = Vec::with_capacity(config_clone.batch_size);
 
             'outer: loop {
                 let dir = {
-                    let mut queue = work_queue.lock().map_err(|e| {
-                        SearchError::ThreadError(format!("Failed to lock work queue: {}", e))
-                    })?;
-                    queue.pop_front()
+                    match work_queue.lock() {
+                        Ok( mut q) => {
+                            q.pop_front()
+                        }
+                        Err(e) => {
+                            if config_clone.verbose {
+                                error_log
+                                    .lock()
+                                    .unwrap()
+                                    .push(format!("Failed to lock work queue: {}", e));
+                            }
+                            None
+                        }
+                    }
                 };
 
                 match dir {
                     Some(dir) => {
-                        progress.set_message(format!(
-                            "Thread {} scanning: {}",
-                            thread_id,
-                            dir.display()
-                        ));
+                        progress.set_message(format!("Scanning: {}", dir.display()));
 
                         // Check if directory should be skipped
-                        if let Ok(canonical_dir) = dir.canonicalize() {
-                            if skip_dirs
-                                .iter()
-                                .any(|skip_dir| canonical_dir.starts_with(skip_dir))
-                            {
-                                continue;
+                        match dir.canonicalize() {
+                            Ok(canonical_dir) => {
+                                if skip_dirs
+                                    .iter()
+                                    .any(|skip_dir| canonical_dir.starts_with(skip_dir))
+                                {
+                                    continue;
+                                }
+                            }
+                            Err(e) => {
+                                if config_clone.verbose {
+                                    error_log.lock().unwrap().push(format!("Failed to canonicalize directory {:#?} : {}", dir, e));
+                                }
                             }
                         }
 
                         // Wait for available file handle with timeout
                         let mut wait_time = 1;
-                        while open_files.load(Ordering::Relaxed) >= max_open_files {
+                        while open_files.load(Ordering::Relaxed) >= config_clone.max_open_files {
                             thread::sleep(std::time::Duration::from_millis(wait_time));
                             wait_time = wait_time.saturating_mul(2).min(100); // Exponential backoff
                         }
@@ -347,15 +319,16 @@ fn parallel_search(
                                     let file_entry = match path.metadata() {
                                         Ok(metadata) => {
                                             if metadata.is_dir() {
-                                                work_queue
-                                                    .lock()
-                                                    .map_err(|e| {
-                                                        SearchError::ThreadError(format!(
-                                                            "Failed to lock work queue: {}",
-                                                            e
-                                                        ))
-                                                    })?
-                                                    .push_back(path);
+                                                match work_queue.lock() {
+                                                    Ok(mut q) => {
+                                                        q.push_back(path);
+                                                    }
+                                                    Err(e) => {
+                                                        if config_clone.verbose {
+                                                            error_log.lock().unwrap().push(format!("Error obtaining lock on work queue: {}", e));
+                                                        }
+                                                    }
+                                                }
                                                 continue;
                                             }
                                             FileEntry {
@@ -373,20 +346,22 @@ fn parallel_search(
                                     };
 
                                     batch.push(file_entry);
-                                    if batch.len() >= batch_size {
+                                    if batch.len() >= config_clone.batch_size {
                                         tx.send(batch).map_err(|e| {
                                             SearchError::SendError(format!(
                                                 "Failed to send batch: {}",
                                                 e
                                             ))
                                         })?;
-                                        batch = Vec::with_capacity(batch_size);
+                                        batch = Vec::with_capacity(config_clone.batch_size);
                                     }
                                 }
                             }
                             Err(err) => {
                                 errors_count.fetch_add(1, Ordering::Relaxed);
-                                eprintln!("Error reading directory {}: {}", dir.display(), err);
+                                if config_clone.verbose {
+                                    error_log.lock().unwrap().push(format!("Error reading directory {}: {}", dir.display(), err));
+                                }
                             }
                         }
 
@@ -437,7 +412,12 @@ fn parallel_search(
     // Check for any thread errors
     for result in thread_results {
         if let Err(err) = result {
-            eprintln!("Thread error: {:?}", err);
+            if config.verbose {
+                error_log
+                    .lock()
+                    .unwrap()
+                    .push(format!("Thread error: {:?}", err));
+            }
         }
     }
 
@@ -450,16 +430,11 @@ fn parallel_search(
     Ok(())
 }
 
-/// Responsible for initiating the directory traversdal and analysis of discovered files.
+/// Responsible for initiating the directory traversdal and analyzing files as they are discovered
 ///
 /// # Arguments
 ///
-/// * `config` - A `Config` struct containing:
-///   * `num_entries` - Number of largest files to track and display
-///   * `root_path` - Starting directory path for the search
-///   * `skip_dirs` - Directories to exclude from the search
-///   * `batch_size` - Number of files to process in each batch
-///   * `max_open_files` - Maximum number of files to keep open simultaneously
+/// * `config` - An instance of a `Config` struct
 ///
 /// # Returns
 ///
@@ -474,6 +449,7 @@ fn parallel_search(
 /// # Output
 ///
 /// Upon completion, prints a list of the largest files found, with their paths and sizes.
+/// If verbsoity was enabled, errors will be printed before file size results.
 ///
 /// # Implementation Details
 ///
@@ -481,9 +457,13 @@ fn parallel_search(
 /// - Maintains thread-safe access to the top entries using `Arc<Mutex<TopEntries>>`
 /// - Processes files in batches for better performance
 /// - Shows real-time progress using the `indicatif` crate's progress bars
-/// - Writes errors to a logfile if command line arg is present
 ///
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+    let is_verbose = config.verbose;
+    let error_log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let error_log_clone = error_log.clone();
+    let config_arc: Arc<Config> = Arc::new(config.clone());
+
     print!(
         "Searching for {0} largest entries in {1}:\n",
         config.num_entries,
@@ -515,9 +495,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             &root_path,
             tx,
             scan_progress,
-            &config.skip_dirs,
-            config.batch_size,
-            config.max_open_files,
+            config_arc.clone(),
+            error_log_clone.clone(),
         )
     });
 
@@ -528,7 +507,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 
     while let Ok(batch) = rx.recv() {
         total_files += batch.len();
-        let (processed, attempted) = process_batch(batch, &top_entries);
+        let (processed, attempted) =
+            process_batch(batch, &top_entries, error_log.clone(), is_verbose);
         total_processed += processed;
         total_attempts += attempted;
 
@@ -544,12 +524,12 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     match scan_handle.join() {
         Ok(result) => result.map_err(|e| Box::new(e))?,
         Err(e) => {
-            // TODO write to file
-            let _ = log_error(&format!("Scanner thread panicked: {:?}", e));
-            return Err(Box::new(io::Error::new(
-                io::ErrorKind::Other,
-                "Scanner thread panicked. Check log file for details.".to_string(),
-            )));
+            if is_verbose {
+                error_log
+                    .lock()
+                    .unwrap()
+                    .push(format!("Scanner thread panicked: {:?}", e));
+            }
         }
     }
 
@@ -560,13 +540,19 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         total_attempts - total_processed
     ));
 
+    if is_verbose {
+        println!();
+        error_log.lock().unwrap().iter().for_each(|e| {
+            eprintln!("{}", e);
+        });
+    }
+
     println!();
 
-    // Handle top entries display with error handling
     match top_entries.lock() {
         Ok(top) => {
             if top.entries.is_empty() {
-                println!("No files found matching the criteria");
+                println!("No files found - run with -v flag for error output");
             } else {
                 for (path, size) in top.entries.iter() {
                     println!("{}: {}", path, size.format_size());
@@ -576,7 +562,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
         Err(e) => {
             return Err(Box::new(io::Error::new(
                 io::ErrorKind::Other,
-                format!("Failed to lock top entries for display: {}", e),
+                format!("Failed to lock top entries for final output: {}", e),
             )));
         }
     }

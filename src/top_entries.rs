@@ -1,6 +1,6 @@
 /// A data structure that maintains a fixed-size collection of entries sorted by numeric value in descending order.
 ///
-/// `TopEntries` keeps track of the `max_entries` largest values it has seen, along with associated string identifiers.
+/// `TopEntries` keeps track of the `max_entries` largest values it has seen, along with associated filepath.
 /// When a new entry is inserted, it is automatically placed in the correct position to maintain the descending order,
 /// and if the collection exceeds its capacity, the smallest value is dropped.
 ///
@@ -27,7 +27,7 @@ pub struct TopEntries {
 }
 
 impl TopEntries {
-    /// Creates a new `TopEntries` instance with the specified maximum capacity.
+    /// Creates a new `TopEntries` instance.
     ///
     /// The internal vector is pre-allocated with capacity `max_entries + 1` to optimize
     /// for the case where we temporarily need to hold an extra entry before dropping the smallest one.
