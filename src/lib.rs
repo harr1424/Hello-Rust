@@ -423,7 +423,7 @@ fn parallel_search(
 
     let error_count = errors_count.load(Ordering::Relaxed);
     progress.finish_with_message(format!(
-        "Directory scan complete ({} errors encountered)",
+        "Directory scan complete ({} errors encountered: run with -v for details)",
         error_count
     ));
 

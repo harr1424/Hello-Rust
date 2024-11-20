@@ -5,6 +5,27 @@ display information about large files on your filesystem.
 
 It will display the Nth largest files nested at any level within a directory that you specify. I ran it against my home directory and discovered a [colletion of ancient docker volumes](https://stackoverflow.com/questions/39878939/docker-filling-up-storage-on-macos) inside the `~/.Library` directory. 
 
+```
+A CLI to find large files
+
+Usage: ferris-files [OPTIONS]
+
+Options:
+  -n, --num_entries <NUM_ENTRIES>
+          (optional) Number of largest entries to output [default: 10]
+  -b, --batch_Size <BATCH_SIZE>
+          (optional) Number of files to size at one time [default: 1000]
+  -d, --directory <TARGET_DIR>
+          (optional) defaults to attempting to detect current working directory
+  -x, --excluded-dirs-file <EXCLUSION_FILE>
+          (optional) Path to a file where each line specifies a directory to ignore
+  -v, --verbose
+          
+  -h, --help
+          Print help
+  -V, --version
+          Print version
+```
 
 ```
 Program will run using 12 threads
